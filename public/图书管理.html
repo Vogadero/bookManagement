@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图书管理</title>
+    <style type="text/css">
+        .grid {
+            margin: auto;
+            width: 530px;
+            text-align: center;
+        }
+
+        .grid table {
+            border-top: 1px solid #C2D89A;
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .grid th,
+        td {
+            padding: 10;
+            border: 1px dashed #F3DCAB;
+            height: 35px;
+            line-height: 35px;
+        }
+
+        .grid th {
+            background-color: #F3DCAB;
+        }
+
+        .grid .book {
+            padding-bottom: 10px;
+            padding-top: 5px;
+            background-color: #F3DCAB;
+        }
+
+        .grid .total {
+            height: 30px;
+            line-height: 30px;
+            background-color: #F3DCAB;
+            border-top: 1px solid #C2D89A;
+            color: purple;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <books-management :info="info" :number-of-statistics-books="numberOfStatisticsBooks" :books="books" :id="id"
+            :name="name" :flag="flag" :state-flag="stateFlag" :operate="operate" :remove="remove"
+            :modify-book="modifyBook">
+        </books-management>
+    </div>
+    <script src="js/vue.js"></script>
+    <script src="js/axios.js"></script>
+    <script type="text/javascript">
+        // 配置请求的基准URL地址
+        axios.defaults.baseURL = 'http://localhost:3000/';
+        //axios设置响应拦截器
+        axios.interceptors.response.use(response => {
+            return response.data //拦截处理响应结果，直接返回需要的数据
+        }, err => {
+            console.log(err)
+        });
+        /* 图书管理-常用特性应用场景 
+        过滤器（格式化日期）
+        自定义指令（获取表单焦点）
+        计算属性（统计图书数量）
+        侦听器（验证图书存在性）
+        生命周期（图书数据处理）*/
+
+        // 提供单独的事件中心管理组件间的通信
+        var hub = new Vue();
+        var booksTitle = {
+            template: `
+            <h1>
+                <slot name="booksTitle"></slot>
+            </h1>
+            `,
+        };
+        var booksAdd = {
+            //定义了变量来接收父组件传过来的东西
+            props: ['info', 'id', 'name', 'flag', 'stateFlag', 'books'],
+            // 我们再创建一个data,将props里的内容传给data,再让v-model绑定data里的变量
+            data() {
+                return {
+                    dataId: this.id,
+                    dataName: this.name,
+                    dataStateFlag: this.stateFlag
+                }
+            },
+            template: `
+            <div class="book">
+                <div>
+                    <form method="get" enctype="multipart/form-data">
+                        <slot name="booksNumbering"></slot>
+                        <input type="number" id="id" v-model="dataId" :disabled="flag" v-focus>
+                        <slot name="booksName"></slot>
+                        <input type="text" id="name" v-model="dataName">
+                        <input type="submit" @click.prevent="act($event)" :value="info" :disabled="dataStateFlag"></input>
+                    </form>
+                </div>    
+            </div>
+            `,
+            methods: {
+                act: function () {
+                    this.$emit('act-event', {
+                        id: this.dataId,
+                        name: this.dataName
+                    });
+                    this.dataId = "";
+                    this.dataName = "";
+                },
+            },
+            mounted: function () {
+                // 监听事件 val是兄弟组件booksList传过来的参数
+                hub.$on('list-event', (val) => {
+                    this.dataId = val.id;
+                    this.dataName = val.name;
+                })
+            },
+            /* 4.侦听器（验证图书存在性） */
+            watch: {
+                dataName: async function (newVal, oldVal) {
+                    // 调用后台接口验证图书名称是否已经存在    
+                    /* var flag = this.books.some(function (item) {
+                        return item.name == newVal;
+                    }) */
+                    var flag = await axios.get('books/book/' + newVal);
+                    if (flag.status == 1) {
+                        // 图书名称存在        
+                        this.dataStateFlag = true;
+                    } else {
+                        // 图书名称不存在
+                        this.dataStateFlag = false;
+                    }
+                },
+                dataId: function (newVal, oldVal) {
+                    // 验证图书id是否已经存在
+                    var flag = this.books.some(function (item) {
+                        return item.id == newVal;
+                    })
+                    if (flag || newVal <= 0) {
+                        // 图书id存在
+                        this.dataStateFlag = true;
+                    } else {
+                        // 图书id不存在
+                        this.dataStateFlag = false;
+                    }
+                }
+            },
+        };
+        var booksCount = {
+            template: `
+            <div class="total">
+                <slot name="booksTotal"></slot>
+            </div>
+            `,
+        };
+        var booksList = {
+            props: ['books'],
+            template: `
+            <table>
+                <thead>
+                    <tr>
+                        <slot name="booksTheadFirst"></slot>
+                        <slot name="booksTheadSecond"></slot>
+                        <slot name="booksTheadThird"></slot>
+                        <slot name="booksTheadFourth"></slot>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr :key="item.id" v-for="(item,index) in books">
+                        <td v-text="item.id"></td>
+                        <td v-text="item.name"></td>
+                        <td>{{item.date | formattingTime("yyyy-MM-dd hh:mm:ss")}}</td>
+                        <td>
+                            <a href="" @click.prevent="update(item.id,item.name,$event)">修改</a>
+                            <span>|</span>
+                            <a href="" @click.prevent="del(item.id,$event)">删除</a>
+                        </td>
+                    </tr>
+                </tbody> 
+            </table>
+            `,
+            methods: {
+                del: function (id) {
+                    this.$emit('del-event', id);
+                },
+                update: function (id, name) {
+                    this.$emit('update-event', id);
+                    hub.$emit('list-event', {
+                        id: id,
+                        name: name
+                    });
+                }
+            },
+        };
+
+        /* 1.过滤器（格式化日期） */
+        Vue.filter('formattingTime', (value, arg1) => {
+            function dateFormat(date, format) {
+                if (typeof date === "string") {
+                    var mts = date.match(/(\/Date\((\d+)\)\/)/);
+                    if (mts && mts.length >= 3) {
+                        date = parseInt(mts[2]);
+                    }
+                };
+                date = new Date(date);
+                if (!date || date.toUTCString() == "Invalid Date") {
+                    return "";
+                }
+                var map = {
+                    "M": date.getMonth() + 1, //月份 
+                    "d": date.getDate(), //日 
+                    "h": date.getHours(), //小时 
+                    "m": date.getMinutes(), //分 
+                    "s": date.getSeconds(), //秒 
+                    "q": Math.floor((date.getMonth() + 3) / 3), //季度 
+                    "S": date.getMilliseconds() //毫秒 
+                };
+
+                format = format.replace(/([yMdhmsqS])+/g, function (all, t) {
+                    var v = map[t];
+                    if (v !== undefined) {
+                        if (all.length > 1) {
+                            v = '0' + v;
+                            v = v.substr(v.length - 2);
+                        }
+                        return v;
+                    } else if (t === 'y') {
+                        return (date.getFullYear() + '').substr(4 - all.length);
+                    }
+                    return all;
+                });
+                return format;
+            };
+            return dateFormat(value, arg1);
+        });
+
+        /* 2.自定义指令（获取表单焦点） */
+        // 注册一个全局自定义指令 `v-focus`
+        Vue.directive('focus', {
+            // 当被绑定的元素插入到 DOM 中时
+            inserted: function (el, binding) {
+                //el:指令绑定的元素
+                //binding.name指令名	binding.value绑定值	bingding.expression绑定至(字符串形式)
+                // 聚焦元素
+                el.focus();
+            }
+        });
+
+        /* 全局组件注册 */
+        Vue.component('books-management', {
+            // 子组件内部通过props接收传递过来的值,父组件通过属性将值传递给子组件
+            props: ["info", 'numberOfStatisticsBooks', 'books', 'id', 'name', 'flag', 'stateFlag', 'operate',
+                'remove', 'modifyBook'
+            ],
+            data: function () {
+                return {
+                    count: 0
+                };
+            },
+            // 局部组件只能在注册他的父组件中使用，在其子组件中不可用
+            components: {
+                // 自定义子组件的名字：这个组件的选项对象
+                "books-title": booksTitle,
+                "books-add": booksAdd,
+                "books-count": booksCount,
+                "books-list": booksList,
+            },
+            template: `
+            <div class="grid">
+                <books-title>
+                    <template v-slot:booksTitle>
+                        图书管理
+                    </template>
+                </books-title>
+                <books-add :info="info" :id="id" :name="name" :flag="flag" :state-flag="stateFlag" @act-event="operate($event)" :books="books">
+                    <template v-slot:booksNumbering>
+                        <label for="id">
+                            编号：
+                        </label>
+                    </template>
+                    <template v-slot:booksName>
+                        <label for="name">
+                            名称：
+                        </label>
+                    </template>
+                </books-add>
+                <books-count>
+                    <template v-slot:booksTotal>
+                        <span>图书总数：</span>
+                        <span>{{numberOfStatisticsBooks}}</span>
+                    </template>
+                </books-count>
+                <books-list :books="books" @del-event="remove($event)" @update-event="modifyBook($event)">
+                    <template v-slot:booksTheadFirst><th>编号</th></template>
+                    <template v-slot:booksTheadSecond><th>名称</th></template>
+                    <template v-slot:booksTheadThird><th>时间</th></template>
+                    <template v-slot:booksTheadFourth><th>操作</th></template>
+                </books-list>
+            </div>
+            `,
+        });
+
+
+        var vm = new Vue({
+            el: "#app",
+            data: {
+                flag: false,
+                info: "添加",
+                stateFlag: false,
+                id: "",
+                name: "",
+                books: []
+            },
+            methods: {
+                // 重新加载页面
+                reloadPage: function (ret) {
+                    if (ret.status == 200) {
+                        // 重新加载图书列表
+                        this.getBookList();
+                    };
+                },
+                // 重用添加和修改的方法
+                operate: async function (val) {
+                    // 分支结构
+                    if (this.flag) {
+                        /* // 编辑图书：就是根据当前的ID去更新数组中对应的数据
+                        this.books.some((item) => {
+                            //此处必须用箭头函数获取vue实例的this，普通函数function获取的this是windows
+                            if (item.id == val.id) {
+                                item.name = val.name;
+                                item.date = new Date();
+                                // 完成更新操作之后，需要终止循环
+                                return true
+                            }
+                        }); */
+                        // 调用后台接口编辑图书
+                        var ret = await axios.put(`books/` + val.id, {
+                            name: val.name
+                        });
+                        // 重新加载图书列表
+                        this.reloadPage(ret);
+                        this.info = "添加";
+                    } else {
+                        // 调用后台接口添加图书
+                        /* var book = {};
+                        book.id = val.id;
+                        book.name = val.name;
+                        book.date = new Date();
+                        this.books.push(book); */
+                        var ret = await axios.post(`books`, {
+                            name: val.name
+                        });
+                        // 重新加载图书列表
+                        this.reloadPage(ret);
+                    }
+                    // 清空输入框表单
+                    this.id = "";
+                    this.name = "";
+                    this.flag = false;
+                },
+                modifyBook: async function (id) {
+                    // 禁止修改ID
+                    this.flag = true;
+                    this.info = "修改";
+                    /* // 方法一：根据ID查询出要编辑的数据
+                    var book = this.books.filter(function (item) {
+                        return item.id == id;
+                    });
+                    // 把获取到的信息填充到表单
+                    this.id = book[0].id;
+                    this.name = book[0].name; */
+
+                    /* 方法二：根据ID查询出要编辑的数据
+                    this.id = id;
+                    this.name = this.books[id - 1].name; */
+
+                    // 调用后台接口查询出要编辑的数据
+                    var ret = await axios.get("books/" + id);
+                    // 把获取到的信息填充到表单
+                    this.id = ret.id;
+                    this.name = ret.name;
+                },
+                remove: async function (id) {
+                    // 方法一
+                    /* // 1.根据id从数组中查找元素的索引
+                    var index = this.books.findIndex((item) => {
+                        return item.id == id;
+                    });
+                    // 2.根据索引删除数组元素
+                    this.books.splice(index, 1); */
+
+                    /* // 方法二：通过filter方法返回id不同的数组，剔除id相同的
+                    this.books = this.books.filter((item) => {
+                        return item.id != id;
+                    }); */
+
+                    // 调用后台接口删除图书
+                    var ret = await axios.delete('books/' + id);
+                    // 重新加载图书列表
+                    this.reloadPage(ret);
+                },
+                // 调用后台接口获取图书列表
+                getBookList: async function () {
+                    this.books = await axios.get('/books');
+                }
+            },
+            /* 3.计算属性（统计图书数量） */
+            computed: {
+                // 直接当做普通属性调用不加括号
+                // 任何data中数据变化立即重新计算
+                // 计算属性会缓存
+                numberOfStatisticsBooks: function () {
+                    return this.books.length;
+                }
+            },
+            /* 5.生命周期（图书数据处理） */
+            mounted: function () {
+                // 该生命周期钩子函数被触发的时候，模板已经可以使用
+                // 一般此时用于获取后台数据，然后把数据填充到模板
+                this.getBookList();
+            }
+        });
+    </script>
+</body>
+
+</html>

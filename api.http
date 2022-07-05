@@ -1,0 +1,44 @@
+##基准路径： http://localhost:3000/
+###获取图书列表数据
+GET /books HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Cache-Control: no-cache
+
+###添加图书-提交图书信息
+POST /books HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Cache-Control: no-cache
+
+{
+    name:"图书名称"
+}
+
+###编辑图书-根据ID查询图书信息
+GET /books/:id HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Cache-Control: no-cache
+
+###编辑图书-提交图书信息
+PUT /books/:id HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Cache-Control: no-cache
+
+{
+    name:"图书名称"
+}
+
+###删除图书信息
+DELETE /books/:id HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Cache-Control: no-cache
+
+###验证图书名称是否存在
+GET books/book/:name HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Cache-Control: no-cache
